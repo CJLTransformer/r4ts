@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Reach4DaStars</title>
+	<style>
+		html, body, canvas {
+			padding: 0;
+			margin: 0;
+		}
+		html, body {
+			width: 100vw;
+			height: 100vh;
+		}
+		canvas {
+			cursor: none;
+			width: 100vw;
+			height: 100vh;
+			background: #777;
+			image-rendering: -webkit-optimize-contrast;
+			image-rendering: pixelated;
+			background-image: url(img/cloud.png);
+			background-size: 100% 100%;
+			background-repeat: repeat-y;
+			background-position: 0 0;
+		}
+		#button {
+			background: #F00;
+			color: #000;
+			border-radius: 64px;
+			width: 50vw;
+			height: 50vh;
+			position: absolute;
+			top: 25vh;
+			left: 25vw;
+			line-height: 50vh;
+			text-align: center;
+			font-size: 10vw;
+		}
+	</style>
+	<script>
+		var CANVAS,
+			WIDTH,
+			HEIGHT,
+			CONTEXT,
+			ENTITY_SIZE,
+			FRAMES,
+			FRAMESPERSECOND,
+			LASTFPSUPDATETIME,
+			POS_X,
+			OFFSETY,
+			PT,
+			PTS,
+			PERCENTOFSPECIAL;
+		var IMAGE_LOAD = function(arg) {
+			var i = new Image;
+			i.src = arg + "?" + new Date().getTime();
+			return i;
+		};
+		var IMAGE_DRAW = function(img, x, y, w, h, r) {
+			w = w || img.width;
+			h = h || img.height;
+			r = r || 0;
+			x = x || 0;
+			y = y || 0;
+			CONTEXT.save();
+			CONTEXT.translate(x + w/2, y + h/2);
+			CONTEXT.rotate(r / 180 * Math.PI);
+			CONTEXT.drawImage(img, -w/2, -h/2, w, h);
+			CONTEXT.restore();
+		};
+		var SOUND_LOAD = function(sound) {
+			var s = document.createElement('audio');
+			s.src = sound + '?' + new Date().getTime();
+			return s;
+		};
+		var TEXTURES = {
+			"star":	IMAGE_LOAD("img/star_yellow.png"),
+			"item":	IMAGE_LOAD("img/present_green.png"),
+			"plat":	IMAGE_LOAD("img/platform_black.png"),
+			"mstr":	IMAGE_LOAD("img/monster.png"),
+			"play":	IMAGE_LOAD("img/play.png"),
+			"strt":	IMAGE_LOAD("img/finsh_line.png"),
+			"grss": IMAGE_LOAD("img/grass.png")
+		};
+		var SOUND = {
+			"tp": SOUND_LOAD("audio/tp.ogg"),
+			"bp": SOUND_LOAD("audio/bip.ogg"),
+			"di": SOUND_LOAD("audio/die.ogg")
+		};
+		var PLAT = function(x, y, s) {
+			this.used = 0;
+			this.position = {
+				x: x - 256,
+				y: y - 48
+			};
+			this.rotation = 0;
+			this.isSpecial = (s == "SPECIAL"?2:(s=="FINISH"?-100:0));
+			// this.isSpecial = (Math.random() > 1-PERCENTOFSPECIAL) ? 2 : 0;
+			this.collision = function(p) {
+				if(this.isSpecial < -1 && this.isSpecial > -100) return;
+				if(this.isSpecial < -99) {
+					if(this.position.x < p.x + 128 && this.position.x > p.x - 256) {
+						if(this.position.y < p.y && this.position.y + 48 > p.y - 128) {
+							CHAR.velocity.y -= 100;
+							return true;
+						};
+					};
+				};
+				if(this.position.x < p.x + 128 && this.position.x > p.x - 256) {
+					if(this.position.y < p.y && this.position.y + 48 > p.y - 128) {
+						if(CHAR.rotation == 90) return true;
+						var ret = (this.isSpecial > 0) ? 42 : true;
+						// this.rotation = Math.random() * 360;
+						this.isSpecial--;
+						return ret;
+					};
+				};
+				return false;
+			};
+			this.show = function(offsetY) {
+				if(this.isSpecial > 1) {
+					IMAGE_DRAW(TEXTURES["plat"], this.position.x, this.position.y - offsetY + OFFSETY, 256, 48, this.rotation);
+				} else if(this.isSpecial > -1) {
+					IMAGE_DRAW(TEXTURES["grss"], this.position.x, this.position.y - offsetY + OFFSETY, 256, 48, this.rotation);
+				} else if(this.isSpecial < -99) {
+					IMAGE_DRAW(TEXTURES["strt"], this.position.x, this.position.y - offsetY + OFFSETY, 256, 48, this.rotation);
+				}
+				if(this.position.y > CHAR.position.y + HEIGHT + OFFSETY) {
+					// this.position.y -= 2*HEIGHT;
+					// this.position.x = ([256, WIDTH/1.3-128, WIDTH/1.3, WIDTH])[Math.floor(Math.random() * 4)];
+					// if(Math.random() > 1-PERCENTOFSPECIAL) this.isSpecial = 2;
+					// else this.isSpecial = 1;
+					// this.rotation = 0;
+				}
+			};
+		};
+		var PLAYER = function() {
+			this.rotation = 0;
+			this.position = {
+				x: WIDTH/2 - 48,
+				y: OFFSETY - 128
+			};
+			this.velocity = {
+				y: 0
+			};
+			this.move = function() {
+				if(this.velocity.y < -99) CHAR.rotation = Math.random()*180-90;
+				this.position.y += this.velocity.y;
+				if(this.rotation == 0) this.position.x = POS_X;
+				var COLLISION = this.collision();
+				if(COLLISION == true && this.velocity.y > -8) {
+					if(this.rotation == 0) SOUND['bp'].play();
+					if(this.rotation == 0) this.velocity.y = -8;
+					else {
+						this.velocity.y = -0.125;
+						if(SOUND['bp']) SOUND['bp'].play();
+						delete SOUND['bp'];
+					};
+				};
+				if(COLLISION == 42) {
+					if(this.rotation == 0) SOUND['tp'].play();
+					if(this.rotation == 0) PT += 15;
+					if(this.rotation == 0) this.velocity.y = -14;
+					else this.velocity.y = -0.125;
+				};
+				this.velocity.y += 0.125;
+				if(this.velocity.y >= 8) {
+					this.rotation = 90;
+					if(SOUND["di"]) SOUND["di"].play();
+					delete SOUND.di;
+				};
+			};
+			this.show = function() {
+				// IMAGE_DRAW(TEXTURES["mstr"], this.position.x - 48, this.position.y, 128, 128);
+				IMAGE_DRAW(TEXTURES["play"], this.position.x - 48, OFFSETY, 128, 128, this.rotation);
+			};
+			this.collision = function() {
+				if(this.position.y > HEIGHT - 128) return true;
+				for(var i of PLATS) {
+					if (i.collision({x: POS_X, y: this.position.y + 128})) return i.collision({x: POS_X, y: this.position.y + 128});
+				};
+			};
+		};
+		function LEVEL(fileName) {
+			var XML = new XMLHttpRequest();
+			fileName += '?' + new Date().getTime();
+			XML.open("GET", fileName, false);
+			XML.send("ClientOfficial v1.01");
+			return JSON.parse(XML.responseText);
+		};
+		var DRAW = function() {
+			FRAMES++;
+			if(LASTFPSUPDATETIME < new Date().getTime() - 999) {
+				FRAMESPERSECOND = FRAMES;
+				FRAMES = 0;
+				LASTFPSUPDATETIME = new Date().getTime();
+			};
+			document.querySelectorAll('.FRAMERATE').forEach(function(COUNTER) {
+				COUNTER.innerText = (FRAMESPERSECOND || 60) + " FPS";
+			});
+			CONTEXT.clearRect(0, 0, WIDTH, HEIGHT);
+			PLATS.forEach((e)=>e.show(CHAR.position.y));
+			if(CHAR.position.y + 192 > OFFSETY) {
+				IMAGE_DRAW(TEXTURES["strt"], 0, HEIGHT - CHAR.position.y - OFFSETY + 192, WIDTH, WIDTH*0.3);
+				// CONTEXT.fillRect(0, HEIGHT - CHAR.position.y + OFFSETY, WIDTH, WIDTH/6)
+			};
+			CHAR.move();
+			CHAR.show();
+			CANVAS.style['background-position'] = '0 ' + (- CHAR.position.y - OFFSETY)/2 + 'px';
+			if(CHAR.velocity.y < 0) PTS -= CHAR.velocity.y/100;
+			POINTS = Math.floor(PTS + PT);
+			// PTS = (Math.floor(((HEIGHT-CHAR.position.y)/100)));
+			// if(PTS < POINTS - 1) PTS = POINTS;
+			// POINTS = PTS + PT;
+			if(CHAR.velocity.y > 8) {
+				document.querySelector('canvas').display = 'none';
+			};
+			document.querySelectorAll(".POINTS").forEach((e)=>e.innerText=POINTS + " PTS");
+		};
+		var CHAR,
+			PLATS, 
+			POINTS;
+		window.onload = function() {
+			LASTFPSUPDATETIME = 0;
+			POINTS = 0;
+			PTS = 0;
+			PT = 0;
+			POS_X = 0;
+			FRAMESPERSECOND = 60;
+			PERCENTOFSPECIAL = 0.05;
+			CANVAS = document.querySelector('#game');
+			WIDTH = 800;
+			HEIGHT = 600;
+			OFFSETY = HEIGHT/3;
+			CONTEXT = CANVAS.getContext('2d');
+			ENTITY_SIZE = 64;
+			CHAR = new PLAYER();
+			PLATS = [];
+			PLATS.push(new PLAT(WIDTH/1.3, HEIGHT/1.3));
+			PLATS.push(new PLAT(WIDTH/1.3-128, -192+HEIGHT/1.3));
+			for(var i = 0 ; i < new LEVEL("lvl/lvl1.json").plats.length ; i ++) {
+				var x = new LEVEL("lvl/lvl1.json").plats[i][0],
+					y = new LEVEL("lvl/lvl1.json").plats[i][1],
+					s = new LEVEL("lvl/lvl1.json").plats[i][2] || "not";
+					console.log(s);
+				y -= OFFSETY + 6000 - 600;
+				x += 256;
+				console.log(Math.sqrt(x*x + Math.pow(y-OFFSETY,2)));
+				PLATS.push(new PLAT(x, y, s));
+			};
+			CANVAS.width = WIDTH;
+			CANVAS.height = HEIGHT;
+			CANVAS.imageSmoothingEnabled = false;
+			CANVAS.webkitImageSmoothingEnabled = false;
+			CANVAS.mozImageSmoothingEnabled = false;
+			document.querySelector('#button').onclick = ()=>{
+				document.querySelector('#button').style.display = 'none';
+				setInterval(DRAW, 16)
+			};
+		};
+		window.onmousemove = function(e) {
+			e.preventDefault();
+			POS_X = e.pageX/(window.innerWidth / WIDTH);
+			return false;
+		};
+		window.ontouchmove = function(e) {
+			e.preventDefault();
+			POS_X = e.changedTouches[0].pageX/(window.innerWidth / WIDTH);
+			return false;
+		};
+	</script>
+</head>
+<body>
+	<canvas id='game'></canvas>
+	<a style='position: absolute; top: 0.2vh; left: 0.4vw; font-size: 3vw;' class='FRAMERATE'></a>
+	<a style='position: absolute; top: 3.4vh; left: 0.4vw; font-size: 3vw;' class='POINTS'></a>
+	<div id='button'>Start</div>
+</body>
+</html>
