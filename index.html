@@ -67,7 +67,7 @@
 			CONTEXT.rotate(r / 180 * Math.PI);
 			CONTEXT.drawImage(img, -w/2, -h/2, w, h);
 			CONTEXT.restore();
-		}, IMAGE_DRAW_ALT = function(img, x, y, w, h, r, f) {
+		}, IMAGE_DRAW_ALT = function(img, x, y, w, h, r, f, amt) {
 			w = w || img.width;
 			h = h || img.height;
 			r = r || 0;
@@ -76,7 +76,7 @@
 			CONTEXT.save();
 			CONTEXT.translate(x + w/2, y + h/2);
 			CONTEXT.rotate(r / 180 * Math.PI);
-			CONTEXT.drawImage(img, img.width/2*f, 0, img.width/2, img.height, -w/2, -h/2, w, h);
+			CONTEXT.drawImage(img, img.width/amt*f, 0, img.width/amt, img.height, -w/2, -h/2, w, h);
 			CONTEXT.restore();
 		};
 		var SOUND_LOAD = function(sound) {
@@ -90,6 +90,7 @@
 			"plat":	IMAGE_LOAD("img/platform_black.png"),
 			"mstr":	IMAGE_LOAD("img/monster.png"),
 			"fkup":	IMAGE_LOAD("img/fuckedup.png"),
+			"...?":	IMAGE_LOAD("img/blood.png"),
 			"play":	IMAGE_LOAD("img/play.png"),
 			"strt":	IMAGE_LOAD("img/finsh_line.png"),
 			"grss": IMAGE_LOAD("img/grass.png")
@@ -107,6 +108,8 @@
 			};
 			this.rotation = 0;
 			this.isSpecial = (Math.random() < PERCENTOFSPECIAL) ? 2 : 0;
+			this.rand = Math.random() > 0.7 ? Math.random() * 100 : 0;
+			this.rand2 = Math.random() > 0.8 ? Math.random() * 100 : 0;
 			this.collision = function(p) {
 				if(CHAR.velocity.y < 0.5) return;
 				if(this.isSpecial < -1 && this.isSpecial > -100) return;
@@ -134,6 +137,10 @@
 					IMAGE_DRAW(TEXTURES["plat"], this.position.x, this.position.y - offsetY + OFFSETY, 256, 48, this.rotation);
 				} else if(this.isSpecial > -1) {
 					IMAGE_DRAW(TEXTURES["grss"], this.position.x, this.position.y - offsetY + OFFSETY, 256, 48, this.rotation);
+					var r = Math.floor(this.rand * 2.4);
+					var r2 = Math.floor(this.rand2 * 2.4);
+					if(r > 0) IMAGE_DRAW(TEXTURES["...?"], this.position.x + r, this.position.y - offsetY + OFFSETY, 16, 12); 
+					if(r2 > 0) IMAGE_DRAW(TEXTURES["...?"], this.position.x + r2, this.position.y - offsetY + OFFSETY, 16, 12); 
 				} else if(this.isSpecial < -99) {
 					IMAGE_DRAW(TEXTURES["strt"], this.position.x, this.position.y - offsetY + OFFSETY, 256, 48, this.rotation);
 				}
@@ -181,15 +188,18 @@
 				};
 				this.velocity.y += 0.125;
 				if(this.rotation == 90 && COLLISION) {this.velocity.y = -0.125;}
-				if(this.velocity.y >= 14.2) {
-					this.rotation = 90;
+				if(this.rotation > 0 && this.rotation < 90) {
+					this.rotation += 5;
+				};
+				if(this.velocity.y >= 14.2 && this.rotation == 0) {
+					this.rotation = 5;
 					if(SOUND["di"]) SOUND["di"].play();
 					delete SOUND.di;
 				};
 			};
 			this.show = function() {
-				if(this.rotation == 90) IMAGE_DRAW(TEXTURES["fkup"], this.position.x - 48, OFFSETY, 128, 128, 90, 1);
-				else IMAGE_DRAW_ALT(TEXTURES["play"], this.position.x - 48, OFFSETY, 128, 128, this.rotation, this.velocity.y > 0.5 ? 1 : 0);
+				if(this.rotation == 90) IMAGE_DRAW_ALT(TEXTURES["play"], this.position.x - 48, OFFSETY, 128, 128, this.rotation, 2, 3);
+				else IMAGE_DRAW_ALT(TEXTURES["play"], this.position.x - 48, OFFSETY, 128, 128, this.rotation, this.velocity.y > 0.5 ? 1 : 0, 3);
 			};
 			this.collision = function() {
 				if(this.position.y > HEIGHT - 128) return true;
@@ -197,13 +207,6 @@
 					if (i.collision({x: POS_X, y: this.position.y + 128})) return i.collision({x: POS_X, y: this.position.y + 128});
 				};
 			};
-		};
-		function LEVEL(fileName) {
-			var XML = new XMLHttpRequest();
-			fileName += '?' + new Date().getTime();
-			XML.open("GET", fileName, false);
-			XML.send("ClientOfficial v1.01");
-			return JSON.parse(XML.responseText);
 		};
 		var DRAW = function() {
 			FRAMES++;
@@ -240,7 +243,7 @@
 			POINTS,
 			TIME_START = 0,
 			PTS = 0;
-		window.onload = function() {
+		window.onload = window.onkeypress = function() {
 			TIME_START = new Date().getTime();
 			LASTFPSUPDATETIME = 0;
 			POINTS = 0;
@@ -260,16 +263,6 @@
 			PLATS.push(new PLAT(WIDTH/1.3, HEIGHT/1.3));
 			PLATS.push(new PLAT(WIDTH/1.3-128, -192+HEIGHT/1.3));
 			PLATS.push(new PLAT(WIDTH/1.3+64, -384+HEIGHT/1.3));
-			// for(var i = 0 ; i < new LEVEL("lvl/lvl1.json").plats.length ; i ++) {
-				// var x = new LEVEL("lvl/lvl1.json").plats[i][0],
-				// 	y = new LEVEL("lvl/lvl1.json").plats[i][1],
-				// 	s = new LEVEL("lvl/lvl1.json").plats[i][2] || "not";
-					// console.log(s);
-				// y -= OFFSETY + 6000 - 600;
-				// x += 256;
-				// console.log(Math.sqrt(x*x + Math.pow(y-OFFSETY,2)));
-				// PLATS.push(new PLAT(x, y, s));
-			// };
 			CANVAS.width = WIDTH;
 			CANVAS.height = HEIGHT;
 			CANVAS.imageSmoothingEnabled = false;
@@ -277,7 +270,7 @@
 			CANVAS.mozImageSmoothingEnabled = false;
 			document.querySelector('#button').onclick = ()=>{
 				document.querySelector('#button').style.display = 'none';
-				setInterval(DRAW, 13)
+				setInterval(DRAW, 12)
 			};
 		};
 		window.onmousemove = function(e) {
